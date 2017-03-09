@@ -26,12 +26,14 @@ class TensorflowBackend(Backend):
         return tf is not None
 
     @assert_backend_available
-    def is_compatible(self, objective, argument):
+    def is_compatible(self, objective, argument, data=[]):
         if isinstance(objective, tf.Tensor):
             if (argument is None or not
                 isinstance(argument, tf.Variable) and not
                 all([isinstance(arg, tf.Variable)
-                     for arg in argument])):
+                     for arg in argument]) or not
+                all([isinstance(dat, tf.Tensor)
+                     for dat in data])):
                 raise ValueError(
                     "Tensorflow backend requires an argument (or sequence of "
                     "arguments) with respect to which compilation is to be "
@@ -40,22 +42,22 @@ class TensorflowBackend(Backend):
         return False
 
     @assert_backend_available
-    def compile_function(self, objective, argument):
+    def compile_function(self, objective, argument, data=[]):
         if not isinstance(argument, list):
 
-            def func(x):
-                feed_dict = {argument: x}
+            def func(x,dat):
+                feed_dict = {i: d for i, d in zip([argument] + data, [x] + dat)}
                 return self._session.run(objective, feed_dict)
         else:
 
-            def func(x):
-                feed_dict = {i: d for i, d in zip(argument, x)}
+            def func(x,dat):
+                feed_dict = {i: d for i, d in zip(argument+data, x+dat)}
                 return self._session.run(objective, feed_dict)
 
         return func
 
     @assert_backend_available
-    def compute_gradient(self, objective, argument):
+    def compute_gradient(self, objective, argument,data=[]):
         """
         Compute the gradient of 'objective' and return as a function.
         """
@@ -63,14 +65,14 @@ class TensorflowBackend(Backend):
 
         if not isinstance(argument, list):
 
-            def grad(x):
-                feed_dict = {argument: x}
+            def grad(x,dat):
+                feed_dict = {i: d for i, d in zip([argument]+data, [x]+dat)}
                 return self._session.run(tfgrad[0], feed_dict)
 
         else:
 
-            def grad(x):
-                feed_dict = {i: d for i, d in zip(argument, x)}
+            def grad(x,dat):
+                feed_dict = {i: d for i, d in zip(argument+data, x+dat)}
                 return self._session.run(tfgrad, feed_dict)
 
         return grad
