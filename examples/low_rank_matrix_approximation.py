@@ -36,3 +36,5 @@ solver = ConjugateGradient()
 
 # let Pymanopt do the rest
 X = solver.solve(problem)
+
+print X

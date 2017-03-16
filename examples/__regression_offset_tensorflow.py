@@ -77,4 +77,3 @@ if __name__ == "__main__":
     print(wclosed[0:3].T)
     print(wclosed[3])
 
-    zz=1

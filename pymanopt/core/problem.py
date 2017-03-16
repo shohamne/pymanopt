@@ -48,19 +48,24 @@ class Problem(object):
             Level of information printed by the solver while it operates, 0
             is silent, 2 is most information.
     """
-    def __init__(self, manifold, cost, egrad=None, ehess=None, grad=None,
-                 hess=None, arg=None, precon=None, verbosity=2):
+    def __init__(self, manifold, cost, accuracy=None, summary=None, egrad=None, ehess=None, grad=None,
+                 hess=None, arg=None, data=[], precon=None, verbosity=2):
         self.manifold = manifold
         # We keep a reference to the original cost function in case we want to
         # call the `prepare` method twice (for instance, after switching from
         # a first- to second-order method).
         self._cost = None
         self._original_cost = cost
+        self._accuracy = None
+        self._original_accuracy = accuracy
+        self._accuracy_and_summary = None
+        self._original_accuracy_and_summary = [accuracy,summary]
         self._egrad = egrad
         self._ehess = ehess
         self._grad = grad
         self._hess = hess
-        self._arg = arg
+        self._arg = arg if isinstance(arg,list) else [arg]
+        self._data = data
         self._backend = None
 
         if precon is None:
@@ -98,19 +103,43 @@ class Problem(object):
             if self.verbosity >= 1:
                 print("Compiling cost function...")
             self._cost = self.backend.compile_function(self._original_cost,
-                                                       self._arg)
+                                                       self._arg + self._data)
         elif self._cost is None and callable(self._original_cost):
             self._cost = self._original_cost
 
         return self._cost
 
     @property
+    def accuracy(self):
+        if self._accuracy is None:
+            if self.verbosity >= 1:
+                print("Compiling accuracy function...")
+            self._accuracy = self.backend.compile_function(self._original_accuracy,
+                                                           self._arg + self._data)
+        elif self._accuracy is None and callable(self._original_accuracy):
+            self._accuracy = self._original_accuracy
+
+        return self._accuracy
+
+    @property
+    def accuracy_and_summary(self):
+        if self._accuracy_and_summary is None:
+            if self.verbosity >= 1:
+                print("Compiling accuracy_and_summary function...")
+            self._accuracy_and_summary = self.backend.compile_function(self._original_accuracy_and_summary,
+                                                       self._arg + self._data)
+        elif self._accuracy_and_summary is None and callable(self._original_accuracy_and_summary):
+            self._accuracy_and_summary = self._original_accuracy_and_summary
+
+        return self._accuracy_and_summary
+    
+    @property
     def egrad(self):
         if self._egrad is None:
             if self.verbosity >= 1:
                 print("Computing gradient of cost function...")
             egrad = self.backend.compute_gradient(self._original_cost,
-                                                  self._arg)
+                                                  self._arg+self._data)
             self._egrad = egrad
         return self._egrad
 
@@ -146,3 +175,6 @@ class Problem(object):
                     x, self.egrad(x), ehess(x, a), a)
             self._hess = hess
         return self._hess
+
+    def write_summary(self,summary,iter):
+        self.backend.write_summary(summary,iter)

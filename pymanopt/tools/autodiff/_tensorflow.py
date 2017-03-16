@@ -11,13 +11,19 @@ try:
 except ImportError:
     tf = None
 
-from ._backend import Backend, assert_backend_available
+from datetime import datetime
+from os import path
 
+from ._backend import Backend, assert_backend_available
+from ._utils import unflatten, flatten
 
 class TensorflowBackend(Backend):
     def __init__(self):
         if tf is not None:
             self._session = tf.Session()
+            now = datetime.now()
+            logdir = path.join('/tmp/tf_beackend_logs',now.strftime("%Y%m%d-%H%M%S"))
+            self._writer = tf.train.SummaryWriter(logdir, self._session.graph_def)
 
     def __str__(self):
         return "tensorflow"
@@ -26,14 +32,12 @@ class TensorflowBackend(Backend):
         return tf is not None
 
     @assert_backend_available
-    def is_compatible(self, objective, argument, data=[]):
+    def is_compatible(self, objective, argument):
         if isinstance(objective, tf.Tensor):
             if (argument is None or not
                 isinstance(argument, tf.Variable) and not
                 all([isinstance(arg, tf.Variable)
-                     for arg in argument]) or not
-                all([isinstance(dat, tf.Tensor)
-                     for dat in data])):
+                     for arg in argument])):
                 raise ValueError(
                     "Tensorflow backend requires an argument (or sequence of "
                     "arguments) with respect to which compilation is to be "
@@ -42,22 +46,22 @@ class TensorflowBackend(Backend):
         return False
 
     @assert_backend_available
-    def compile_function(self, objective, argument, data=[]):
+    def compile_function(self, objective, argument):
         if not isinstance(argument, list):
 
-            def func(x,dat):
-                feed_dict = {i: d for i, d in zip([argument] + data, [x] + dat)}
+            def func(x):
+                feed_dict = {argument: x}
                 return self._session.run(objective, feed_dict)
         else:
 
-            def func(x,dat):
-                feed_dict = {i: d for i, d in zip(argument+data, x+dat)}
+            def func(x):
+                feed_dict = {i: d for i, d in zip(argument, flatten(x))}
                 return self._session.run(objective, feed_dict)
 
         return func
 
     @assert_backend_available
-    def compute_gradient(self, objective, argument,data=[]):
+    def compute_gradient(self, objective, argument):
         """
         Compute the gradient of 'objective' and return as a function.
         """
@@ -65,15 +69,15 @@ class TensorflowBackend(Backend):
 
         if not isinstance(argument, list):
 
-            def grad(x,dat):
-                feed_dict = {i: d for i, d in zip([argument]+data, [x]+dat)}
+            def grad(x):
+                feed_dict = {argument: x}
                 return self._session.run(tfgrad[0], feed_dict)
 
         else:
 
-            def grad(x,dat):
-                feed_dict = {i: d for i, d in zip(argument+data, x+dat)}
-                return self._session.run(tfgrad, feed_dict)
+            def grad(x):
+                feed_dict = {i: d for i, d in zip(argument, flatten(x))}
+                return unflatten(self._session.run(tfgrad, feed_dict),x)
 
         return grad
 
@@ -97,3 +101,7 @@ class TensorflowBackend(Backend):
                 return self._session.run(tfhess, feed_dict)
 
         return hess
+
+    @assert_backend_available
+    def write_summary(self, summary,iter):
+        self._writer.add_summary(summary,iter)

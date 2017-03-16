@@ -79,6 +79,83 @@ class LineSearchBackTracking(object):
         return stepsize, newx
 
 
+class StochasticLineSearchBackTracking(object):
+    """
+    Back-tracking line-search based on linesearch.m in the manopt MATLAB
+    package.
+    """
+
+    def __init__(self, contraction_factor=.5, optimism=2,
+                 suff_decr=1e-4, maxiter=25, initial_stepsize=1):
+        self.contraction_factor = contraction_factor
+        self.optimism = optimism
+        self.suff_decr = suff_decr
+        self.maxiter = maxiter
+        self.initial_stepsize = initial_stepsize
+
+        self._oldf0 = None
+
+    def search(self, objective, manifold, x, data, d, f0, df0):
+        """
+        Function to perform backtracking line-search.
+        Arguments:
+            - objective
+                objective function to optimise
+            - manifold
+                manifold to optimise over
+            - x
+                starting point on the manifold
+            - d
+                tangent vector at x (descent direction)
+            - df0
+                directional derivative at x along d
+        Returns:
+            - stepsize
+                norm of the vector retracted to reach newx from x
+            - newx
+                next iterate suggested by the line-search
+        """
+        # Compute the norm of the search direction
+        norm_d = manifold.norm(x, d)
+
+        if self._oldf0 is not None:
+            # Pick initial step size based on where we were last time.
+            alpha = 2 * (f0 - self._oldf0) / df0
+            # Look a little further
+            alpha *= self.optimism
+        else:
+            alpha = self.initial_stepsize / norm_d
+        alpha = float(alpha)
+
+        # Make the chosen step and compute the cost there.
+        newx = manifold.retr(x, alpha * d)
+        newf = objective(newx+data)
+        step_count = 1
+
+        # Backtrack while the Armijo criterion is not satisfied
+        while (newf > f0 + self.suff_decr * alpha * df0 and
+               step_count <= self.maxiter):
+
+            # Reduce the step size
+            alpha = self.contraction_factor * alpha
+
+            # and look closer down the line
+            newx = manifold.retr(x, alpha * d)
+            newf = objective(newx)
+
+            step_count = step_count + 1
+
+        # If we got here without obtaining a decrease, we reject the step.
+        if newf > f0:
+            alpha = 0
+            newx = x
+
+        stepsize = alpha * norm_d
+
+        self._oldf0 = f0
+
+        return stepsize, newx
+
 class LineSearchAdaptive(object):
     '''
     Adaptive line-search
