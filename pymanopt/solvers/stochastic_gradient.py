@@ -92,7 +92,6 @@ class SGD(Solver):
 
                 gradnorm = man.norm(w, grad)
 
-
                 if verbosity >= 2:
                     print("%5d\t%+.16e\t%.8e" % (iter, cost, gradnorm))
 
@@ -102,11 +101,13 @@ class SGD(Solver):
                 # Descent direction is minus the gradient
                 desc_dir = -grad
 
+                # update w
+                w = man.retr(w, learnning_rate  * desc_dir)
+                stepsize = man.norm(w, desc_dir)
+
                 # Perform line-search
-                #w = man.retr(w, learnning_rate  * desc_dir)
-                #stepsize = man.norm(w, desc_dir)
-                stepsize, w = linesearch.search(objective, man, w, data, desc_dir,
-                                                cost, -gradnorm**2)
+                #stepsize, w = linesearch.search(objective, man, w, data, desc_dir,
+                #                                cost, -gradnorm**2)
 
                 stop_reason = self._check_stopping_criterion(
                     time0, stepsize=stepsize, gradnorm=gradnorm, iter=iter)
