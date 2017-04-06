@@ -3,9 +3,12 @@ from __future__ import print_function, division
 import time
 from copy import deepcopy
 
+import numpy as np
+
 from pymanopt.solvers.linesearch import LineSearchBackTracking
 from pymanopt.solvers.solver import Solver
 
+from pymanopt.tools.autodiff._utils import flatten, unflatten
 
 class SGD(Solver):
     """
@@ -23,7 +26,8 @@ class SGD(Solver):
         self.linesearch = None
 
     # Function to solve optimisation problem using steepest descent.
-    def solve(self, problem, dataset, batch_size, learnning_rate, w=None, reuselinesearch=False):
+    def solve(self, problem, dataset, batch_size, learning_rate_starter,
+                 learning_rate_decay_steps,learning_rate_decay_rate, w=None, reuselinesearch=False):
         """
         Perform optimization using gradient descent with linesearch.
         This method first computes the gradient (derivative) of obj
@@ -54,6 +58,8 @@ class SGD(Solver):
         gradient = problem.grad
         accuracy_and_summary = problem.accuracy_and_summary
 
+        learning_rate = learning_rate_starter
+
         if not reuselinesearch or self.linesearch is None:
             self.linesearch = deepcopy(self._linesearch)
         linesearch = self.linesearch
@@ -74,12 +80,16 @@ class SGD(Solver):
 
         while True:
             iter = iter + 1
+
+            if iter % learning_rate_decay_steps == 0:
+                learning_rate *= learning_rate_decay_rate
+
             if iter % 10 == 0:
                 data_test =  [dataset.test.images, dataset.test.labels]
                 cost_test = objective(w + data_test)
                 accu_test, summary = accuracy_and_summary(w + data_test)
                 if verbosity >= 1:
-                    print("%5d\t%+.16e\t%.8e\t%+.16e\t%.8e" % (iter,  cost, gradnorm, cost_test, accu_test))
+                    print("%5d\t%+.16e\t%.8e\t%+.16e\t%.2f" % (iter,  cost, gradnorm, cost_test, accu_test))
                 problem.write_summary(summary,iter)
 
             else:
@@ -88,7 +98,7 @@ class SGD(Solver):
                 data = [batch_xs, batch_ys]
 
                 cost = objective(w+data)
-                grad = gradient(w+data)
+                grad, egrad = gradient(w+data)
 
                 gradnorm = man.norm(w, grad)
 
@@ -98,12 +108,20 @@ class SGD(Solver):
                 if self._logverbosity >= 2:
                     self._append_optlog(iter, w, cost, gradnorm=gradnorm)
 
+                # for debug calulate euclidian update
+                new_ew = [x-learning_rate*d for x,d in zip(flatten(w),flatten(egrad))]
+
                 # Descent direction is minus the gradient
                 desc_dir = -grad
 
                 # update w
-                w = man.retr(w, learnning_rate  * desc_dir)
+                new_w = man.retr(w, learning_rate  * desc_dir)
+
+                dbg = [np.abs(a-b).mean() for a,b in zip(flatten(new_w),new_ew)]
+
+                w = new_w
                 stepsize = man.norm(w, desc_dir)
+
 
                 # Perform line-search
                 #stepsize, w = linesearch.search(objective, man, w, data, desc_dir,

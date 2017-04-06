@@ -175,7 +175,9 @@ class FixedRankEmbedded(Manifold):
         M = (f * (utdu - utdu.T) * x[1] +
              x[1][:, np.newaxis] * f * (vtdv - vtdv.T) + np.diag(egrad[1]))
 
-        return _TangentVector((Up, M, Vp))
+        _T = _TangentVector((Up, M, Vp))
+
+        return _T
 
     def ehess2rhess(self, X, egrad, ehess, H):
         raise NotImplementedError

@@ -150,7 +150,8 @@ class Problem(object):
             egrad = self.egrad
 
             def grad(x):
-                return self.manifold.egrad2rgrad(x, egrad(x))
+                eg = egrad(x)
+                return self.manifold.egrad2rgrad(x, eg) , eg
             self._grad = grad
         return self._grad
 
