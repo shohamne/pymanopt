@@ -26,7 +26,7 @@ class SGD(Solver):
         self.linesearch = None
 
     # Function to solve optimisation problem using steepest descent.
-    def solve(self, problem, dataset, batch_size, learning_rate_starter,
+    def solve(self, problem, e_problem, dataset, batch_size, learning_rate_starter,
                  learning_rate_decay_steps,learning_rate_decay_rate, w=None, reuselinesearch=False):
         """
         Perform optimization using gradient descent with linesearch.
@@ -53,9 +53,12 @@ class SGD(Solver):
                 convergence x will be the point at which it terminated.
         """
         man = problem.manifold
+        e_man = e_problem.manifold
         verbosity = problem.verbosity
         objective = problem.cost
+        e_objective = e_problem.cost
         gradient = problem.grad
+        e_gradient = e_problem.grad
         accuracy_and_summary = problem.accuracy_and_summary
 
         learning_rate = learning_rate_starter
@@ -68,28 +71,35 @@ class SGD(Solver):
         if w is None:
             w = man.rand()
 
+
         # Initialize iteration counter and timer
         iter = 0
         time0 = time.time()
 
         if verbosity >= 1:
-            print(" iter\t\t   cost\t        grad.norm\t    cost test\t     accuracy test")
+            print(" iter\t\t   cost\t        grad.norm\t    cost test\t     accuracy test\t     euc diff")
 
         self._start_optlog(extraiterfields=['gradnorm'],
                            solverparams={'linesearcher': linesearch})
 
         while True:
             iter = iter + 1
+            if len(w[0])==3:
+                e_w = [w[0][0].dot(np.diag(w[0][1])).dot(w[0][2]),w[1]]
+            else:
+                e_w = [w[0][0].dot(w[0][1]), w[1]]
 
             if iter % learning_rate_decay_steps == 0:
                 learning_rate *= learning_rate_decay_rate
 
             if iter % 10 == 0:
+                euc_diff = max(np.abs(e_new_w[0] - e_w[0]).max(),
+                               np.abs(e_new_w[1] - e_w[1]).max())
                 data_test =  [dataset.test.images, dataset.test.labels]
                 cost_test = objective(w + data_test)
                 accu_test, summary = accuracy_and_summary(w + data_test)
                 if verbosity >= 1:
-                    print("%5d\t%+.16e\t%.8e\t%+.16e\t%.2f" % (iter,  cost, gradnorm, cost_test, accu_test))
+                    print("%5d\t%+.16e\t%.8e\t%+.16e\t%.2f\t%+.16e" % (iter,  cost, gradnorm, cost_test, accu_test,euc_diff))
                 problem.write_summary(summary,iter)
 
             else:
@@ -98,7 +108,12 @@ class SGD(Solver):
                 data = [batch_xs, batch_ys]
 
                 cost = objective(w+data)
+                e_cost = e_objective(e_w + data)
                 grad, egrad = gradient(w+data)
+                e_grad, e_egrad = e_gradient(e_w+data)
+
+                #amb = man._manifolds[0].tangent2ambient(w[0], grad[0])
+                #tangent_grad = amb[0].dot(amb[1]).dot(amb[2].T)
 
                 gradnorm = man.norm(w, grad)
 
@@ -113,9 +128,11 @@ class SGD(Solver):
 
                 # Descent direction is minus the gradient
                 desc_dir = -grad
+                e_desc_dir = -e_grad
 
                 # update w
                 new_w = man.retr(w, learning_rate  * desc_dir)
+                e_new_w = e_man.retr(e_w, learning_rate  * e_desc_dir)
 
                 dbg = [np.abs(a-b).mean() for a,b in zip(flatten(new_w),new_ew)]
 

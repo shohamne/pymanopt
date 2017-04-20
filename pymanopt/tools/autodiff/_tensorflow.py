@@ -23,7 +23,7 @@ class TensorflowBackend(Backend):
             self._session = tf.Session()
             now = datetime.now()
             logdir = path.join('/tmp/tf_beackend_logs',now.strftime("%Y%m%d-%H%M%S"))
-            self._writer = tf.train.SummaryWriter(logdir, self._session.graph_def)
+            self._writer = tf.summary.FileWriter(logdir, self._session.graph_def)
 
     def __str__(self):
         return "tensorflow"
