@@ -21,6 +21,8 @@ class TensorflowBackend(Backend):
     def __init__(self):
         if tf is not None:
             self._session = tf.Session()
+            self._session.run(tf.global_variables_initializer())
+
             now = datetime.now()
             logdir = path.join('/tmp/tf_beackend_logs',now.strftime("%Y%m%d-%H%M%S"))
             self._writer = tf.summary.FileWriter(logdir, self._session.graph_def)
@@ -61,7 +63,17 @@ class TensorflowBackend(Backend):
         return func
 
     @assert_backend_available
-    def compute_gradient(self, objective, argument):
+    def get_argument(self, args):
+        """
+        Read current argument data
+        """
+        def argument():
+            return self._session.run(args)
+
+        return argument
+
+    @assert_backend_available
+    def compute_gradient(self, objective, argument, data=[]):
         """
         Compute the gradient of 'objective' and return as a function.
         """
@@ -74,9 +86,9 @@ class TensorflowBackend(Backend):
                 return self._session.run(tfgrad[0], feed_dict)
 
         else:
-
-            def grad(x):
-                feed_dict = {i: d for i, d in zip(argument, flatten(x))}
+            to_feed = argument+data
+            def grad(x,d):
+                feed_dict = {i: d for i, d in zip(to_feed, flatten(x+d))}
                 return unflatten(self._session.run(tfgrad, feed_dict),x)
 
         return grad

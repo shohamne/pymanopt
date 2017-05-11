@@ -53,13 +53,16 @@ class SGD(Solver):
                 convergence x will be the point at which it terminated.
         """
         man = problem.manifold
-        e_man = e_problem.manifold
+
         verbosity = problem.verbosity
         objective = problem.cost
-        e_objective = e_problem.cost
+        argument = problem.argument
         gradient = problem.grad
-        e_gradient = e_problem.grad
         accuracy_and_summary = problem.accuracy_and_summary
+        if e_problem:
+            e_man = e_problem.manifold
+            e_objective = e_problem.cost
+            e_gradient = e_problem.grad
 
         learning_rate = learning_rate_starter
 
@@ -68,8 +71,13 @@ class SGD(Solver):
         linesearch = self.linesearch
 
         # If no starting point is specified, generate one at random.
-        if w is None:
-            w = man.rand()
+
+        w = man.rand()
+        w = unflatten(argument(), w)
+        #if w is None:
+        #    w = w_
+
+
 
 
         # Initialize iteration counter and timer
@@ -83,18 +91,37 @@ class SGD(Solver):
                            solverparams={'linesearcher': linesearch})
 
         while True:
-            iter = iter + 1
-            if len(w[0])==3:
-                e_w = [w[0][0].dot(np.diag(w[0][1])).dot(w[0][2]),w[1]]
-            else:
-                e_w = [w[0][0].dot(w[0][1]), w[1]]
+            if e_problem:
+                if len(w[0])==3:
+                    e_w = [w[0][0].dot(np.diag(w[0][1])).dot(w[0][2]),w[1]]
+                else:
+                    e_w = [w[0][0].dot(w[0][1]), w[1]]
 
             if iter % learning_rate_decay_steps == 0:
                 learning_rate *= learning_rate_decay_rate
 
+            # Calculate new cost, grad and gradnorm
+            batch_xs, batch_ys = dataset.train.next_batch(batch_size)
+            data = [batch_xs, batch_ys]
+
+            cost = objective(w+data)
+            if e_problem:
+                e_cost = e_objective(e_w + data)
+            grad, egrad = gradient(w,data)
+            if e_problem:
+                e_grad, e_egrad = e_gradient(e_w+data)
+
+            #amb = man._manifolds[0].tangent2ambient(w[0], grad[0])
+            #tangent_grad = amb[0].dot(amb[1]).dot(amb[2].T)
+
+            gradnorm = man.norm(w, grad)
+
             if iter % 10 == 0:
-                euc_diff = max(np.abs(e_new_w[0] - e_w[0]).max(),
-                               np.abs(e_new_w[1] - e_w[1]).max())
+                if e_problem:
+                    euc_diff = max(np.abs(e_new_w[0] - e_w[0]).max(),
+                                   np.abs(e_new_w[1] - e_w[1]).max())
+                else:
+                    euc_diff = np.nan
                 data_test =  [dataset.test.images, dataset.test.labels]
                 cost_test = objective(w + data_test)
                 accu_test, summary = accuracy_and_summary(w + data_test)
@@ -102,57 +129,46 @@ class SGD(Solver):
                     print("%5d\t%+.16e\t%.8e\t%+.16e\t%.2f\t%+.16e" % (iter,  cost, gradnorm, cost_test, accu_test,euc_diff))
                 problem.write_summary(summary,iter)
 
-            else:
-                # Calculate new cost, grad and gradnorm
-                batch_xs, batch_ys = dataset.train.next_batch(batch_size)
-                data = [batch_xs, batch_ys]
+            if verbosity >= 2:
+                print("%5d\t%+.16e\t%.8e" % (iter, cost, gradnorm))
 
-                cost = objective(w+data)
-                e_cost = e_objective(e_w + data)
-                grad, egrad = gradient(w+data)
-                e_grad, e_egrad = e_gradient(e_w+data)
+            if self._logverbosity >= 2:
+                self._append_optlog(iter, w, cost, gradnorm=gradnorm)
 
-                #amb = man._manifolds[0].tangent2ambient(w[0], grad[0])
-                #tangent_grad = amb[0].dot(amb[1]).dot(amb[2].T)
+            # for debug calulate euclidian update
+            new_ew = [x-learning_rate*d for x,d in zip(flatten(w),flatten(egrad))]
 
-                gradnorm = man.norm(w, grad)
-
-                if verbosity >= 2:
-                    print("%5d\t%+.16e\t%.8e" % (iter, cost, gradnorm))
-
-                if self._logverbosity >= 2:
-                    self._append_optlog(iter, w, cost, gradnorm=gradnorm)
-
-                # for debug calulate euclidian update
-                new_ew = [x-learning_rate*d for x,d in zip(flatten(w),flatten(egrad))]
-
-                # Descent direction is minus the gradient
-                desc_dir = -grad
+            # Descent direction is minus the gradient
+            desc_dir = -grad
+            if e_problem:
                 e_desc_dir = -e_grad
 
-                # update w
-                new_w = man.retr(w, learning_rate  * desc_dir)
+            # update w
+            new_w = man.retr(w, learning_rate  * desc_dir)
+            if e_problem:
                 e_new_w = e_man.retr(e_w, learning_rate  * e_desc_dir)
 
-                dbg = [np.abs(a-b).mean() for a,b in zip(flatten(new_w),new_ew)]
+            dbg = [np.abs(a-b).mean() for a,b in zip(flatten(new_w),new_ew)]
 
-                w = new_w
-                stepsize = man.norm(w, desc_dir)
-
-
-                # Perform line-search
-                #stepsize, w = linesearch.search(objective, man, w, data, desc_dir,
-                #                                cost, -gradnorm**2)
-
-                stop_reason = self._check_stopping_criterion(
-                    time0, stepsize=stepsize, gradnorm=gradnorm, iter=iter)
+            w = new_w
+            stepsize = man.norm(w, desc_dir)
 
 
-                if stop_reason:
-                    if verbosity >= 1:
-                        print(stop_reason)
-                        print('')
-                    break
+            # Perform line-search
+            #stepsize, w = linesearch.search(objective, man, w, data, desc_dir,
+            #                                cost, -gradnorm**2)
+
+            stop_reason = self._check_stopping_criterion(
+                time0, stepsize=stepsize, gradnorm=gradnorm, iter=iter)
+
+
+            if stop_reason:
+                if verbosity >= 1:
+                    print(stop_reason)
+                    print('')
+                break
+
+            iter += 1
 
 
         if self._logverbosity <= 0:

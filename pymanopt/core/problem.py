@@ -60,6 +60,7 @@ class Problem(object):
         self._original_accuracy = accuracy
         self._accuracy_and_summary = None
         self._original_accuracy_and_summary = [accuracy,summary]
+        self._argument = None
         self._egrad = egrad
         self._ehess = ehess
         self._grad = grad
@@ -132,14 +133,21 @@ class Problem(object):
             self._accuracy_and_summary = self._original_accuracy_and_summary
 
         return self._accuracy_and_summary
-    
+
+    @property
+    def argument(self):
+        if self._argument is None:
+            argument = self.backend.get_argument(self._arg)
+            self._argument = argument
+        return self._argument
+
     @property
     def egrad(self):
         if self._egrad is None:
             if self.verbosity >= 1:
                 print("Computing gradient of cost function...")
             egrad = self.backend.compute_gradient(self._original_cost,
-                                                  self._arg+self._data)
+                                                  self._arg, self._data)
             self._egrad = egrad
         return self._egrad
 
@@ -149,8 +157,8 @@ class Problem(object):
             # Explicit access forces computation/compilation if necessary.
             egrad = self.egrad
 
-            def grad(x):
-                eg = egrad(x)
+            def grad(x,data=[]):
+                eg = egrad(x,data)
                 return self.manifold.egrad2rgrad(x, eg) , eg
             self._grad = grad
         return self._grad
