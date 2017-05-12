@@ -205,9 +205,14 @@ class TestFixedRankEmbeddedManifold(unittest.TestCase):
 
         up, m, vp = m.egrad2rgrad(x, (du, ds, dvt))
 
-        np_testing.assert_allclose(Up, up)
-        np_testing.assert_allclose(M, m)
-        np_testing.assert_allclose(Vp, vp)
+        U, S, V = self.man.tangent2ambient(x, [Up, M, Vp])
+        u, s, v = self.man.tangent2ambient(x, [up, m, vp])
+
+        T = U.dot(S).dot(V.T)
+        t = u.dot(s).dot(v.T)
+
+        np_testing.assert_allclose(T,t)
+
 
     def test_randvec(self):
         e = self.man
@@ -229,3 +234,8 @@ class TestFixedRankEmbeddedManifold(unittest.TestCase):
 
         np_testing.assert_almost_equal(e.norm(x, u), 1)
         assert e.norm(x, u - v) > 1e-6
+
+#if __name__ == '__main__':
+#    test = TestFixedRankEmbeddedManifold()
+#    test.setup()
+#    test.test_egrad2rgrad()
