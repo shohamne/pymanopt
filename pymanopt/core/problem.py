@@ -49,7 +49,7 @@ class Problem(object):
             is silent, 2 is most information.
     """
     def __init__(self, manifold, cost, accuracy=None, summary=None, egrad=None, ehess=None, grad=None,
-                 hess=None, arg=None, data=[], precon=None, verbosity=2):
+                 hess=None, arg=None, data=[], precon=None, verbosity=2, logdir=None):
         self.manifold = manifold
         # We keep a reference to the original cost function in case we want to
         # call the `prepare` method twice (for instance, after switching from
@@ -68,6 +68,7 @@ class Problem(object):
         self._arg = arg if isinstance(arg,list) else [arg]
         self._data = data
         self._backend = None
+        self._logdir = logdir
 
         if precon is None:
             def precon(x, d):
@@ -86,6 +87,8 @@ class Problem(object):
         if self._backend is None:
             for backend in self._backends:
                 if backend.is_compatible(self._original_cost, self._arg):
+                    if hasattr(backend, 'setup_log_writer'):
+                        backend.setup_log_writer(self._logdir)
                     self._backend = backend
                     break
             else:
@@ -96,6 +99,7 @@ class Problem(object):
                     "type `{:s}`. Available backends are: {:s}".format(
                         self._original_cost.__class__.__name__,
                         ", ".join(backend_names)))
+
         return self._backend
 
     @property

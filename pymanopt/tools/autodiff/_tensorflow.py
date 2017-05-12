@@ -23,12 +23,15 @@ class TensorflowBackend(Backend):
             self._session = tf.Session()
             self._session.run(tf.global_variables_initializer())
 
-            now = datetime.now()
-            logdir = path.join('/tmp/tf_beackend_logs',now.strftime("%Y%m%d-%H%M%S"))
-            self._writer = tf.summary.FileWriter(logdir, self._session.graph_def)
-
     def __str__(self):
         return "tensorflow"
+
+    @assert_backend_available
+    def setup_log_writer(self, logdir=None):
+        if logdir is None:
+            now = datetime.now()
+            logdir = path.join('/tmp/tf_beackend_logs', now.strftime("%Y%m%d-%H%M%S"))
+        self._writer = tf.summary.FileWriter(logdir, self._session.graph_def)
 
     def is_available(self):
         return tf is not None
