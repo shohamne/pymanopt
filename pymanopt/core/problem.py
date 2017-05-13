@@ -48,7 +48,8 @@ class Problem(object):
             Level of information printed by the solver while it operates, 0
             is silent, 2 is most information.
     """
-    def __init__(self, manifold, cost, accuracy=None, summary=None, egrad=None, ehess=None, grad=None,
+    def __init__(self, manifold, cost, accuracy=None, train_summary=None, eval_summary=None, 
+                 egrad=None, ehess=None, grad=None,
                  hess=None, arg=None, data=[], precon=None, verbosity=2, logdir=None):
         self.manifold = manifold
         # We keep a reference to the original cost function in case we want to
@@ -58,8 +59,10 @@ class Problem(object):
         self._original_cost = cost
         self._accuracy = None
         self._original_accuracy = accuracy
-        self._accuracy_and_summary = None
-        self._original_accuracy_and_summary = [accuracy,summary]
+        self._eval_accuracy_and_summary = None
+        self._original_eval_accuracy_and_summary = [accuracy, eval_summary]
+        self._train_cost_and_summary = None
+        self._original_train_cost_and_summary = [cost, train_summary]
         self._argument = None
         self._egrad = egrad
         self._ehess = ehess
@@ -127,17 +130,29 @@ class Problem(object):
         return self._accuracy
 
     @property
-    def accuracy_and_summary(self):
-        if self._accuracy_and_summary is None:
+    def eval_accuracy_and_summary(self):
+        if self._eval_accuracy_and_summary is None:
             if self.verbosity >= 1:
-                print("Compiling accuracy_and_summary function...")
-            self._accuracy_and_summary = self.backend.compile_function(self._original_accuracy_and_summary,
-                                                       self._arg + self._data)
-        elif self._accuracy_and_summary is None and callable(self._original_accuracy_and_summary):
-            self._accuracy_and_summary = self._original_accuracy_and_summary
+                print("Compiling eval_accuracy_and_summary function...")
+            self._eval_accuracy_and_summary = self.backend.compile_function(self._original_eval_accuracy_and_summary,
+                                                                            self._arg + self._data)
+        elif self._eval_accuracy_and_summary is None and callable(self._original_eval_accuracy_and_summary):
+            self._eval_accuracy_and_summary = self._original_eval_accuracy_and_summary
 
-        return self._accuracy_and_summary
+        return self._eval_accuracy_and_summary
 
+    @property
+    def train_cost_and_summary(self):
+        if self._train_cost_and_summary is None:
+            if self.verbosity >= 1:
+                print("Compiling train_cost_and_summary function...")
+            self._train_cost_and_summary = self.backend.compile_function(self._original_train_cost_and_summary,
+                                                                            self._arg + self._data)
+        elif self._train_cost_and_summary is None and callable(self._original_train_cost_and_summary):
+            self._train_cost_and_summary = self._original_train_cost_and_summary
+
+        return self._train_cost_and_summary
+    
     @property
     def argument(self):
         if self._argument is None:

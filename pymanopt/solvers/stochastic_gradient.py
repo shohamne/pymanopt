@@ -58,7 +58,8 @@ class SGD(Solver):
         objective = problem.cost
         argument = problem.argument
         gradient = problem.grad
-        accuracy_and_summary = problem.accuracy_and_summary
+        accuracy_and_summary = problem.eval_accuracy_and_summary
+        train_cost_and_summary = problem.train_cost_and_summary
         if e_problem:
             e_man = e_problem.manifold
             e_objective = e_problem.cost
@@ -104,7 +105,9 @@ class SGD(Solver):
             batch_xs, batch_ys = dataset.train.next_batch(batch_size)
             data = [batch_xs, batch_ys]
 
-            cost = objective(w+data)
+            cost, summary = train_cost_and_summary(w+data)
+            problem.write_summary(summary, iter)
+
             if e_problem:
                 e_cost = e_objective(e_w + data)
             grad, egrad = gradient(w,data)
