@@ -4,11 +4,13 @@ import time
 from copy import deepcopy
 
 import numpy as np
+import pandas as pd
 
 from pymanopt.solvers.linesearch import LineSearchBackTracking
 from pymanopt.solvers.solver import Solver
 
 from pymanopt.tools.autodiff._utils import flatten, unflatten
+
 
 class SGD(Solver):
     """
@@ -26,8 +28,8 @@ class SGD(Solver):
         self.linesearch = None
 
     # Function to solve optimisation problem using steepest descent.
-    def solve(self, problem, e_problem, dataset, batch_size, learning_rate_starter,
-                 learning_rate_decay_steps,learning_rate_decay_rate, w=None, reuselinesearch=False):
+    def solve(self, problem, dataset, batch_size, learning_rate_starter,
+                 learning_rate_decay_steps,learning_rate_decay_rate,epoch=10,w=None, reuselinesearch=False):
         """
         Perform optimization using gradient descent with linesearch.
         This method first computes the gradient (derivative) of obj
@@ -58,12 +60,8 @@ class SGD(Solver):
         objective = problem.cost
         argument = problem.argument
         gradient = problem.grad
-        accuracy_and_summary = problem.eval_accuracy_and_summary
-        train_cost_and_summary = problem.train_cost_and_summary
-        if e_problem:
-            e_man = e_problem.manifold
-            e_objective = e_problem.cost
-            e_gradient = e_problem.grad
+        train_scalars_and_summary = problem.train_scalars_and_summary
+        test_scalars_and_summary = problem.test_scalars_and_summary
 
         learning_rate = learning_rate_starter
 
@@ -79,25 +77,23 @@ class SGD(Solver):
         #    w = w_
 
 
-
-
         # Initialize iteration counter and timer
         iter = 0
         time0 = time.time()
 
-        if verbosity >= 1:
-            print(" iter\t\t   cost\t        grad.norm\t    cost test\t     accuracy test\t     euc diff")
-
         self._start_optlog(extraiterfields=['gradnorm'],
                            solverparams={'linesearcher': linesearch})
 
+        print_title = True
+        times = None
+        iir_factor = 0.9
+        cost_avg = 0
+        accu_avg = 0
+        cost_dropout_avg = 0
+        accu_dropout_avg = 0
         while True:
-            if e_problem:
-                if len(w[0])==3:
-                    e_w = [w[0][0].dot(np.diag(w[0][1])).dot(w[0][2]),w[1]]
-                else:
-                    e_w = [w[0][0].dot(w[0][1]), w[1]]
-
+            times_line = pd.Series()
+            times_line['0-read'] = time.time()-time0
             if iter % learning_rate_decay_steps == 0:
                 learning_rate *= learning_rate_decay_rate
 
@@ -105,32 +101,64 @@ class SGD(Solver):
             batch_xs, batch_ys = dataset.train.next_batch(batch_size)
             data = [batch_xs, batch_ys]
 
-            cost, summary = train_cost_and_summary(w+data)
+
+            times_line['1-summ'] = time.time()-time0
+            cost, accu, cost_dropout, accu_dropout, summary = train_scalars_and_summary(w+data)
+
+            cost_avg = cost_avg*iir_factor + cost*(1-iir_factor)
+            accu_avg = accu_avg*iir_factor + accu*(1-iir_factor)
+            cost_dropout_avg = cost_dropout_avg*iir_factor + cost_dropout*(1-iir_factor)
+            accu_dropout_avg = accu_dropout_avg * iir_factor + accu_dropout * (1 - iir_factor)
+
+            times_line['2-summ'] = time.time()-time0
             problem.write_summary(summary, iter)
 
-            if e_problem:
-                e_cost = e_objective(e_w + data)
+
+            times_line['3-grad'] = time.time()-time0
             grad, egrad = gradient(w,data)
-            if e_problem:
-                e_grad, e_egrad = e_gradient(e_w+data)
 
-            #amb = man._manifolds[0].tangent2ambient(w[0], grad[0])
-            #tangent_grad = amb[0].dot(amb[1]).dot(amb[2].T)
 
+            times_line['4-norm'] = time.time()-time0
             gradnorm = man.norm(w, grad)
 
-            if iter % 10 == 0:
-                if e_problem:
-                    euc_diff = max(np.abs(e_new_w[0] - e_w[0]).max(),
-                                   np.abs(e_new_w[1] - e_w[1]).max())
-                else:
-                    euc_diff = np.nan
+
+            times_line['5-eval'] = time.time()-time0
+            if iter % epoch == 0 and iter > 0:
                 data_test =  [dataset.test.images, dataset.test.labels]
-                cost_test = objective(w + data_test)
-                accu_test, summary = accuracy_and_summary(w + data_test)
+                cost_test, accu_test, cost_dropout_test, accu_dropout_test, summary_test = \
+                    train_scalars_and_summary(w + data_test)
+
+                problem.write_summary(summary_test,iter)
+
+                times_diff = {}
+                if times is not None:
+                    times_diff = times.copy()[:-1]
+                    times_diff.values[:] -= times.values[1:]
+                    times_diff = -times_diff
+                    times_diff = times_diff/times_diff.sum()
+                    #times_diff = pd.DataFrame(-times_diff).T
+                    #times_diff.index = ['tm']
+
+                if verbosity >= 1 and print_title:
+                    print("iter\trate\tcost\taccu\tcost_avg\taccu_avg\t"
+                          "cost_do\t\taccu_do\t\tcost_do_avg\taccu_do_avg\t"
+                          "grad_norm\tcost_test\taccu_test\tcost_do_test\taccu_do_test",end='')
+                    for i in times_diff.index:
+                        print("%s" % i,end='\t')
+                    print()
+                    print_title = False
+
                 if verbosity >= 1:
-                    print("%5d\t%+.16e\t%.8e\t%+.16e\t%.2f\t%+.16e" % (iter,  cost, gradnorm, cost_test, accu_test,euc_diff))
-                problem.write_summary(summary,iter)
+                    print("%5d\t%.4f\t%.4f\t%.4f\t%.4f\t\t%.4f\t\t"
+                          "%.4f\t\t%.4f\t\t%.4f\t\t%.4f\t\t"
+                          "%.4f\t\t%.4f\t\t%.4f\t\t%.4f\t\t\t%.4f\t\t" %
+                          (iter, learning_rate, cost, accu, cost_avg, accu_avg,
+                           cost_dropout, accu_dropout,cost_dropout_avg, accu_dropout_avg,
+                           gradnorm, cost_test, accu_test, cost_dropout_test, accu_dropout_test),end='')
+                    for i in times_diff.values:
+                        print("%.2f" % i,end='\t')
+                    print()
+
 
             if verbosity >= 2:
                 print("%5d\t%+.16e\t%.8e" % (iter, cost, gradnorm))
@@ -138,22 +166,15 @@ class SGD(Solver):
             if self._logverbosity >= 2:
                 self._append_optlog(iter, w, cost, gradnorm=gradnorm)
 
-            # for debug calulate euclidian update
-            new_ew = [x-learning_rate*d for x,d in zip(flatten(w),flatten(egrad))]
 
+
+            times_line['6-apply'] = time.time()-time0
             # Descent direction is minus the gradient
             desc_dir = -grad
-            if e_problem:
-                e_desc_dir = -e_grad
+
 
             # update w
-            new_w = man.retr(w, learning_rate  * desc_dir)
-            if e_problem:
-                e_new_w = e_man.retr(e_w, learning_rate  * e_desc_dir)
-
-            dbg = [np.abs(a-b).mean() for a,b in zip(flatten(new_w),new_ew)]
-
-            w = new_w
+            w = man.retr(w, learning_rate  * desc_dir)
             stepsize = man.norm(w, desc_dir)
 
 
@@ -170,6 +191,13 @@ class SGD(Solver):
                     print(stop_reason)
                     print('')
                 break
+
+            times_line['7-end'] = time.time()-time0
+
+            if times is not None:
+                times += times_line
+            else:
+                times = times_line
 
             iter += 1
 

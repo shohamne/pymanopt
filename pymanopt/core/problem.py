@@ -48,7 +48,9 @@ class Problem(object):
             Level of information printed by the solver while it operates, 0
             is silent, 2 is most information.
     """
-    def __init__(self, manifold, cost, accuracy=None, train_summary=None, eval_summary=None, 
+    def __init__(self, manifold, cost, accuracy=None,
+                 cost_dropout=None, accuracy_dropout=None,
+                 train_summary=None, test_summary=None,
                  egrad=None, ehess=None, grad=None,
                  hess=None, arg=None, data=[], precon=None, verbosity=2, logdir=None):
         self.manifold = manifold
@@ -57,12 +59,12 @@ class Problem(object):
         # a first- to second-order method).
         self._cost = None
         self._original_cost = cost
-        self._accuracy = None
-        self._original_accuracy = accuracy
-        self._eval_accuracy_and_summary = None
-        self._original_eval_accuracy_and_summary = [accuracy, eval_summary]
-        self._train_cost_and_summary = None
-        self._original_train_cost_and_summary = [cost, train_summary]
+        self._train_scalars_and_summary = None
+        self._original_train_scalars_and_summary = \
+            [cost, accuracy, cost_dropout, accuracy_dropout, train_summary]
+        self._test_scalars_and_summary = None
+        self._original_test_scalars_and_summary = \
+            [cost, accuracy, cost_dropout, accuracy_dropout, test_summary]
         self._argument = None
         self._egrad = egrad
         self._ehess = ehess
@@ -118,41 +120,29 @@ class Problem(object):
         return self._cost
 
     @property
-    def accuracy(self):
-        if self._accuracy is None:
+    def train_scalars_and_summary(self):
+        if self._train_scalars_and_summary is None:
             if self.verbosity >= 1:
-                print("Compiling accuracy function...")
-            self._accuracy = self.backend.compile_function(self._original_accuracy,
-                                                           self._arg + self._data)
-        elif self._accuracy is None and callable(self._original_accuracy):
-            self._accuracy = self._original_accuracy
+                print("Compiling train_scalars_and_summary function...")
+            self._train_scalars_and_summary = self.backend.compile_function(self._original_train_scalars_and_summary,
+                                                                            self._arg + self._data)
+        elif self._train_scalars_and_summary is None and callable(self._original_train_scalars_and_summary):
+            self._train_scalars_and_summary = self._original_train_scalars_and_summary
 
-        return self._accuracy
+        return self._train_scalars_and_summary
 
     @property
-    def eval_accuracy_and_summary(self):
-        if self._eval_accuracy_and_summary is None:
+    def test_scalars_and_summary(self):
+        if self._test_scalars_and_summary is None:
             if self.verbosity >= 1:
-                print("Compiling eval_accuracy_and_summary function...")
-            self._eval_accuracy_and_summary = self.backend.compile_function(self._original_eval_accuracy_and_summary,
-                                                                            self._arg + self._data)
-        elif self._eval_accuracy_and_summary is None and callable(self._original_eval_accuracy_and_summary):
-            self._eval_accuracy_and_summary = self._original_eval_accuracy_and_summary
+                print("Compiling test_scalars_and_summary function...")
+            self._test_scalars_and_summary = self.backend.compile_function(self._original_test_scalars_and_summary,
+                                                                           self._arg + self._data)
+        elif self._test_scalars_and_summary is None and callable(self._original_test_scalars_and_summary):
+            self._test_scalars_and_summary = self._original_test_scalars_and_summary
 
-        return self._eval_accuracy_and_summary
+        return self._test_scalars_and_summary
 
-    @property
-    def train_cost_and_summary(self):
-        if self._train_cost_and_summary is None:
-            if self.verbosity >= 1:
-                print("Compiling train_cost_and_summary function...")
-            self._train_cost_and_summary = self.backend.compile_function(self._original_train_cost_and_summary,
-                                                                            self._arg + self._data)
-        elif self._train_cost_and_summary is None and callable(self._original_train_cost_and_summary):
-            self._train_cost_and_summary = self._original_train_cost_and_summary
-
-        return self._train_cost_and_summary
-    
     @property
     def argument(self):
         if self._argument is None:
