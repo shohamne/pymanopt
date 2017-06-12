@@ -30,7 +30,7 @@ class TensorflowBackend(Backend):
     def setup_log_writer(self, logdir=None):
         if logdir is None:
             now = datetime.now()
-            logdir = path.join('/tmp/tf_beackend_logs', now.strftime("%Y%m%d-%H%M%S"))
+            logdir = path.join('tf_backend_logs', now.strftime("%Y%m%d-%H%M%S"))
         self._writer = tf.summary.FileWriter(logdir, self._session.graph_def)
 
     def is_available(self):

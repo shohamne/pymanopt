@@ -126,7 +126,7 @@ class SGD(Solver):
             if iter % epoch == 0 and iter > 0:
                 data_test =  [dataset.test.images, dataset.test.labels]
                 cost_test, accu_test, cost_dropout_test, accu_dropout_test, summary_test = \
-                    train_scalars_and_summary(w + data_test)
+                    test_scalars_and_summary(w + data_test)
 
                 problem.write_summary(summary_test,iter)
 
@@ -139,24 +139,27 @@ class SGD(Solver):
                     #times_diff = pd.DataFrame(-times_diff).T
                     #times_diff.index = ['tm']
 
+                print_times = False
                 if verbosity >= 1 and print_title:
                     print("iter\trate\tcost\taccu\tcost_avg\taccu_avg\t"
                           "cost_do\t\taccu_do\t\tcost_do_avg\taccu_do_avg\t"
                           "grad_norm\tcost_test\taccu_test\tcost_do_test\taccu_do_test",end='')
-                    for i in times_diff.index:
-                        print("%s" % i,end='\t')
+                    if print_times:
+                        for i in times_diff.index:
+                           print("%s" % i,end='\t')
                     print()
                     print_title = False
 
                 if verbosity >= 1:
                     print("%5d\t%.4f\t%.4f\t%.4f\t%.4f\t\t%.4f\t\t"
                           "%.4f\t\t%.4f\t\t%.4f\t\t%.4f\t\t"
-                          "%.4f\t\t%.4f\t\t%.4f\t\t%.4f\t\t\t%.4f\t\t" %
+                          "%.4f\t\t%.4f\t\t%.4f\t\t%.4f\t\t%.4f\t\t" %
                           (iter, learning_rate, cost, accu, cost_avg, accu_avg,
                            cost_dropout, accu_dropout,cost_dropout_avg, accu_dropout_avg,
                            gradnorm, cost_test, accu_test, cost_dropout_test, accu_dropout_test),end='')
-                    for i in times_diff.values:
-                        print("%.2f" % i,end='\t')
+                    if print_times:
+                        for i in times_diff.values:
+                            print("%.2f" % i,end='\t')
                     print()
 
 
